@@ -36,7 +36,7 @@ class Server
     const VERSION = '2.0';
 
     /** @var Translator */
-    private $translator;
+    protected $translator;
 
     /**
      * @param Translator $translator
@@ -81,7 +81,7 @@ class Server
      * Returns an array of response/error objects when multiple queries are made.
      * Returns null when no response is necessary.
      */
-    private function processInput($input)
+    protected function processInput($input)
     {
         if (!is_array($input)) {
             return self::errorJson();
@@ -109,7 +109,7 @@ class Server
      * Returns an array of response/error objects when multiple queries are made.
      * Returns null when no response is necessary.
      */
-    private function processBatchRequests($input)
+    protected function processBatchRequests($input)
     {
         $replies = array();
 
@@ -138,7 +138,7 @@ class Server
      * Returns a response object or an error object.
      * Returns null when no response is necessary.
      */
-    private function processRequest($request)
+    protected function processRequest($request)
     {
         if (!is_array($request)) {
             return self::errorRequest();
@@ -206,7 +206,7 @@ class Server
      * @return array
      * Returns a response object or an error object.
      */
-    private function processQuery($id, $method, $arguments)
+    protected function processQuery($id, $method, $arguments)
     {
         $callable = $this->translator->getCallable($method);
 
@@ -233,7 +233,7 @@ class Server
      * @param array $arguments
      * Array of arguments that will be passed to the method.
      */
-    private function processNotification($method, $arguments)
+    protected function processNotification($method, $arguments)
     {
         $callable = $this->translator->getCallable($method);
 
@@ -255,13 +255,71 @@ class Server
      * Returns the return value from the callable.
      * Returns null on error.
      */
-    private static function run($callable, $arguments)
+    protected static function run($callable, $arguments)
     {
         if (self::isPositionalArguments($arguments)) {
             return call_user_func_array($callable, $arguments);
+        } else {
+            $orderedArguments = self::orderArguments($callable, $arguments);
+
+            if ($orderedArguments === null) {
+                return null;
+            } else {
+                return call_user_func_array($callable, $orderedArguments);
+            }
+        }
+    }
+
+    /**
+     * Orders the given argument list to match the callable/method arguments
+     * to allow auto-mapping.
+     *
+     * @param callable $callable
+     * A callable to be used to detect the argument names.
+     *
+     * @param array $arguments
+     * Associative array of arguments; keys will be used to match parameters.
+     *
+     * @return array|null
+     * Returns an index-based array or arguments.
+     * Returns null on error.
+     */
+    protected static function orderArguments($callable, $arguments)
+    {
+        $reflection = self::createReflectionMethod($callable);
+        $orderedArgs = array();
+
+        /* @var $param \ReflectionParameter */
+        foreach ($reflection->getParameters() as $param) {
+            if (isset($arguments[$param->getName()])) {
+                $orderedArgs[] = $arguments[$param->getName()];
+            } else if ($param->isOptional()) {
+                $orderedArgs[] = $param->getDefaultValue();
+            } else {
+                return null;
+            }
         }
 
-        return call_user_func($callable, $arguments);
+        return $orderedArgs;
+    }
+
+    /**
+     * Creates a ReflectionMethod object which can be used to
+     * inspect the callable.
+     *
+     * @param callable $callable
+     * The callable to be inspected.
+     *
+     * @return \ReflectionMethod
+     * Returns an instance of ReflectionMethod based on the callable.
+     */
+    protected static function createReflectionMethod($callable)
+    {
+        if (is_array($callable) && isset($callable[0])) {
+            return new \ReflectionMethod($callable[0], $callable[1]);
+        } else {
+            return new \ReflectionMethod(null, $callable);
+        }
     }
 
     /**
@@ -274,7 +332,7 @@ class Server
      * @return bool
      * Returns true iff the arguments array is zero-indexed.
      */
-    private static function isPositionalArguments($arguments)
+    protected static function isPositionalArguments($arguments)
     {
         $i = 0;
 
@@ -294,7 +352,7 @@ class Server
      * @return array
      * Returns an error object.
      */
-    private static function errorJson()
+    protected static function errorJson()
     {
         return self::error(null, -32700, 'Parse error');
     }
@@ -306,7 +364,7 @@ class Server
      * @return array
      * Returns an error object.
      */
-    private static function errorRequest()
+    protected static function errorRequest()
     {
         return self::error(null, -32600, 'Invalid Request');
     }
@@ -321,7 +379,7 @@ class Server
      * @return array
      * Returns an error object.
      */
-    private static function errorMethod($id)
+    protected static function errorMethod($id)
     {
         return self::error($id, -32601, 'Method not found');
     }
@@ -336,7 +394,7 @@ class Server
      * @return array
      * Returns an error object.
      */
-    private static function errorArguments($id)
+    protected static function errorArguments($id)
     {
         return self::error($id, -32602, 'Invalid params');
     }
@@ -357,7 +415,7 @@ class Server
      * @return array
      * Returns an error object.
      */
-    private static function error($id, $code, $message)
+    protected static function error($id, $code, $message)
     {
         $error = array(
             'code' => $code,
@@ -384,7 +442,7 @@ class Server
      * @return array
      * Returns a response object.
      */
-    private static function response($id, $result)
+    protected static function response($id, $result)
     {
         return array(
             'jsonrpc' => self::VERSION,
