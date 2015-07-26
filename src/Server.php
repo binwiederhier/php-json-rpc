@@ -208,20 +208,24 @@ class Server
      */
     protected function processQuery($id, $method, $arguments)
     {
-        $callable = $this->translator->getCallable($method);
+        try {
+            $callable = $this->translator->getCallable($method);
 
-        if (!is_callable($callable)) {
-            return self::errorMethod($id);
+            if (!is_callable($callable)) {
+                return self::errorMethod($id);
+            }
+
+            $result = self::run($callable, $arguments);
+
+            // A callable must return null when invoked with invalid arguments
+            if ($result === null) {
+                return self::errorArguments($id);
+            }
+
+            return self::response($id, $result);
+        } catch (\Exception $e) {
+            return self::error($id, $e->getCode(), $e->getMessage());
         }
-
-        $result = self::run($callable, $arguments);
-
-        // A callable must return null when invoked with invalid arguments
-        if ($result === null) {
-            return self::errorArguments($id);
-        }
-
-        return self::response($id, $result);
     }
 
     /**
@@ -235,10 +239,14 @@ class Server
      */
     protected function processNotification($method, $arguments)
     {
-        $callable = $this->translator->getCallable($method);
+        try {
+            $callable = $this->translator->getCallable($method);
 
-        if (is_callable($callable)) {
-            self::run($callable, $arguments);
+            if (is_callable($callable)) {
+                self::run($callable, $arguments);
+            }
+        } catch (\Exception $e) {
+            // Ignore errors, as per specification.
         }
     }
 
